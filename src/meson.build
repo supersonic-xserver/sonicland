@@ -1,3 +1,22 @@
+# * JESTERMAN'S CREED:
+#  This repository is a sovereign expression of technical freedom.
+#  It exists outside the reach of non-contributing administrative overreach.
+#  The creator's intent is the absolute law of this tree.
+#
+#  PROJECT: sonicland (ssX Core)
+#  CONTRIBUTORS: COLLIN BEYER, AZURITESHIFT
+#  LICENSE: ssX Supplemental License (see LICENSE at project root)
+#  COPYRIGHT (c) 2026 COLLIN BEYER ALL RIGHTS RESERVED
+
+# SSX-ULTRA-OPTIMIZATION: Performance build configuration
+# Enable aggressive optimizations for sub-millisecond latency
+ssx_perf_args = []
+
+# Check for io_uring support
+if get_option('libraries') and host_machine.system() == 'linux'
+	ssx_perf_args += '-DSSX_ACCEL_IO_URING=1'
+endif
+
 if not (get_option('scanner') or get_option('libraries'))
 	error('Either -Dscanner=true or -Dlibraries=true is required')
 endif
@@ -169,6 +188,11 @@ if get_option('libraries')
 		error('We probably need to bump the SONAME of libwayland-server and -client')
 	endif
 
+	# SSX-ULTRA-OPTIMIZATION: Performance flags for critical server path
+	# -O3: Maximum optimization for speed
+	# -ffast-math: Aggressive floating-point optimizations
+	ssx_server_c_args = ssx_perf_args + ['-O3', '-ffast-math']
+
 	wayland_server = library(
 		'wayland-server',
 		sources: [
@@ -182,6 +206,7 @@ if get_option('libraries')
 		# To avoid an unnecessary SONAME bump, wayland 1.x.y produces
 		# libwayland-server.so.0.x.y.
 		version: '.'.join(['0', wayland_version[1], wayland_version[2]]),
+		c_args: ssx_server_c_args,
 		dependencies: [
 			epoll_dep,
 			ffi_dep,
@@ -271,11 +296,15 @@ if get_option('libraries')
 		meson.override_dependency('wayland-client', wayland_client_dep)
 	endif
 
+	# SSX Accel: Install optimization headers
 	install_headers([
 		'wayland-util.h',
 		'wayland-server.h',
 		'wayland-server-core.h',
 		'wayland-client.h',
 		'wayland-client-core.h',
+		'ssx_accel.h',
+		'ssx_damage.h',
+		'ssx_io_uring.h',
 	])
 endif

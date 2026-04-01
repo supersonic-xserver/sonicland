@@ -1,0 +1,82 @@
+name: Sync upstream commits from wayland/wayland
+
+on:
+  schedule:
+  - cron: "17 6 * * *" # once a day at 06:17 UTC
+  workflow_dispatch:
+    # allow manual runs
+
+jobs:
+  check-upstream:
+    runs-on: codeberg-tiny
+
+    steps:
+    - name: Checkout fork
+      uses: https://data.forgejo.org/actions/checkout@v4
+      with:
+        fetch-depth: 0 # full history for comparisons
+
+    - name: Add upstream remote
+      run: |
+        git remote add upstream https://gitlab.freedesktop.org/wayland/wayland.git
+        git fetch upstream
+
+    - name: Detect, grep and sync or queue upstream/main commits
+      run: |
+        set -euo pipefail
+        BAD=0
+        QBRANCH_NAME="upstream_auto-sync-$(date +"%Y-%m-%d")"
+        QBRANCH_COMMITID=""
+
+        # Set git config temporarily
+        git config --local user.name "qc-infra"
+        git config --local user.email "bot@codeberg.org"
+
+        # Compare upstream/main to origin/main
+        NEW=$(git rev-list --count origin/main..upstream/main || echo 0)
+        echo "NEW_COMMITS=$NEW" >> "$FORGEJO_OUTPUT"
+
+        # Count number of new commits and screen their diffs for age check related keywords
+        if [ "$NEW" -gt 0 ]; then
+          COMMITS=$(git rev-list origin/main..upstream/main)
+          for COMMIT in $COMMITS; do
+            if git show "$COMMIT" | grep -qiE '\bage\b|\bbirth\b'; then
+              BAD=1 ; break
+              # exit the loop since the commits will be manually reviewed anyways
+            fi
+          done
+
+          if [ "$BAD" -ne 0 ]; then
+            echo MESSAGE=\"Commits failed agecheck screening, creating issue and pushing to a queue branch\" | tee $FORGEJO_OUTPUT
+
+            # Create a queue branch from origin/main
+            git switch -c "$QBRANCH_NAME" origin/main
+            git merge --no-ff upstream/main -m "Queue upstream changes for agecheck review"
+            git push -u origin "$QBRANCH_NAME"
+
+            QBRANCH_COMMITID=$(git ls-remote origin "$QBRANCH_NAME" | cut -f1 || git rev-parse HEAD)
+            curl -sS -X POST \
+              -H "Authorization: token $FORGEJO_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$(jq -n --arg c "$QBRANCH_NAME" --arg id "$QBRANCH_COMMITID" --arg rn "${FORGEJO_RUN_ID:-${GITHUB_RUN_NUMBER:-unknown}}" '
+                {
+                  title: "Upstream sync: branch \($c) at commit \($id) did not pass agecheck screening",
+                  body: "Automated sync of upstream commits into main branch raised concerns.\n\Branch \($c) contains changes assumedly related to age verification and is submitted for manual screening.\n\nCI run: \($rn)"
+                }')" \
+              "$FORGEJO_API_URL/repos/$FORGEJO_REPOSITORY/issues"
+            echo MESSAGE=\"Issue created for upstream commits. Branch: $QBRANCH_NAME\" | tee $FORGEJO_OUTPUT
+
+          else
+            # No commits flagged in screening
+            echo MESSAGE=\"Upstream has $NEW new commits, merging...\" | tee $FORGEJO_OUTPUT
+            git switch main
+            git merge upstream/main
+            git push origin main
+            echo MESSAGE=\"Successfully synchronized to upstream.\" | tee $FORGEJO_OUTPUT
+          fi
+        else
+          echo MESSAGE=\"No new upstream commits.\" | tee $FORGEJO_OUTPUT
+        fi
+
+        # Reset git config (remove the set vars)
+        git config --local --remove-section user || git config --local --unset-all user.name user.email

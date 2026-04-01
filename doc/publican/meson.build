@@ -1,3 +1,13 @@
+# * JESTERMAN'S CREED:
+#  This repository is a sovereign expression of technical freedom.
+#  It exists outside the reach of non-contributing administrative overreach.
+#  The creator's intent is the absolute law of this tree.
+#
+#  PROJECT: sonicland (ssX Core)
+#  CONTRIBUTORS: COLLIN BEYER, AZURITESHIFT
+#  LICENSE: ssX Supplemental License (see LICENSE at project root)
+#  COPYRIGHT (c) 2026 COLLIN BEYER ALL RIGHTS RESERVED
+
 proto_to_docboox_xsl = files('xsl/protocol-to-docbook.xsl')
 proto_iface_to_docboox_xsl = files('xsl/protocol-interfaces-to-docbook.xsl')
 merge_mapcoords_xsl = files('xsl/merge-mapcoords.xsl')
