@@ -12,6 +12,13 @@ if not get_option('libraries')
 	error('-Dtests=true requires -Dlibraries=true')
 endif
 
+# Prevent ld.lld from garbage collecting test_section markers
+# between __start_test_section and __stop_test_section symbols
+test_link_flags = []
+if cc.has_link_argument('-Wl,-z,nostart-stop-gc')
+	test_link_flags = ['-Wl,-z,nostart-stop-gc']
+endif
+
 test_runner = static_library(
 	'test-runner',
 	sources: [
@@ -29,7 +36,8 @@ test_runner = static_library(
 		wayland_private_dep,
 		wayland_client_dep,
 		wayland_server_dep
-	]
+	],
+	link_args: test_link_flags
 )
 
 test_runner_dep = declare_dependency(
@@ -38,7 +46,8 @@ test_runner_dep = declare_dependency(
 	dependencies: [
 		dependency('threads'),
 		cc.find_library('dl', required: false)
-	]
+	],
+	link_args: test_link_flags
 )
 
 tests_protocol_xml = files('../protocol/tests.xml')
